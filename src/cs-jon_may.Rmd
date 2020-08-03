@@ -63,7 +63,7 @@ We clear the workspace, and load `tidyverse` package, then read the four data fi
 
 ### Problems
 
-Problem booklet with 7 problems (solved=1, not=0, total=n solved)
+Participants attempted to solve seven divergent thinking problems from a booklet. Each problem was coded as solved (=1) or not solved (=0) and the experiementers created a file with a column for the participant id (subj) and a column of 1s and 0s for each problem. 
 
 ```{r}
 problems <- read_csv('case-studies/jon-may/problems.csv')
@@ -73,19 +73,25 @@ solved <- problems %>%
   select(subj, problems)
 ```
 
+**Explanation of commands:**
+We read the problems CSV file into the dataframe `problems`. Then we use `rowwise` and `sum(c_across(...))` to add up the total problems solved for each participant, creating a new dataframe called `solved`, containing just the participant id `subj` and the total solved `problems`.
+
 ### OCEAN
 
-Big5 OCEAN questionnaire 50 items answered 1 to 5 (includes a data entry error)
+The Big5 OCEAN questionnaire contained 50 items (ten for each factor), each answered 1 to 5, with some needing to be reverse scored. The response data was entered into a CSV file **big5** (the experimenters made one obvious data entry error). The items had been presented in an intermixed order, so to facilitate scoring, the experimenters also made a CSV file **oceankey** containing a scaleID for each column in **big5**, with the ten items for each scale being named with the initial letter of their scale and prefixed with **r** if they needed to be reversed (e.g., column `S36` was the ninth item of the Extraversion scale, and was reversed, so was named as ItemID `rE09`.
 
 ```{r}
 ocean   <- read_csv('case-studies/jon-may/big5.csv')
-#big5    <- read_csv('case-studies/jon-may/big5_total.csv', col_types = 'fiiiii')
 
 oceankey<-read.csv("case-studies/jon-may/oceankey.csv")
 
 scaleIDs <- oceankey$ScaleID                 # make a vector of the new variable names
 names(scaleIDs) <- oceankey$ItemID           # name each new name with the old name so it can be looked-up
 
+```
+After reading in both of these files, a named vector `scaledIDs` is created. This allows column names to be 'looked-up', so e.g. `scaleIDs["S36"]` returns `rE09`, the scaleID for column S36.
+
+```{r}
 ocean.scales<-ocean %>%
    pivot_longer(S1:S50,names_to='Item', values_to='Value') %>%     # put the 50 items into a column
    mutate(ScaleID=scaleIDs[Item])%>%                               # lookup the new names from the vector
@@ -103,32 +109,49 @@ ocean.scales<-ocean %>%
           neuroticism=mean(c_across(N01:N10), na.rm = TRUE)) %>%
    select(subj, openness, conscientiousness, extraversion, agreeableness, neuroticism)
 ```
+**Explanation of commands**
+This long chunk of tidy code renames all of the item, cleans up the data, reverse scores the items that need reversing, and computes means for each of the five factors.  
+
+* First,  the `pivot_longer` command puts the values from all fifty columns into a single new column called `Value`, with the column names saved into `Item`. 
+
+* The `mutate` command then creates a new column mapping the Item names into the more useful ScaleIDs (looking them up using the named vector), and  the Item column is deleted. 
+
+* The three `mutate` commands first turn any value larger than the scale maximum to NA (this gets rid of the obvious data entry problem); then use `grepl("r", ScaleID)` to find any items whose names begin with "`r`" and subtracts them from 6 to reverse score them; and removes any "`r`" from the item names. 
+
+* The `pivot_wider` command puts each participant's data into a single row again, now with the new r-less scaleID column names, and sorts them alphabetically, while keeping the `subj` column first. 
+
+* Finally the `rowwise` and `mean(c_across(...))` commands create the scale means, and only these need to be retained in the final data frame called **ocean.scales**.
 
 ### Flexible thinking test
 
-* We don't have raw data for the ‘Flexible Thinking Test’ (overall scores mean of ftt1-3)
+The ‘Flexible Thinking Test’ was a boolet with three subtests in it. Each subtest gave a score, and these were typed into a CSV file called ftt. They need to be added up
 
 ```{r}
 ftt <- read_csv('case-studies/jon-may/ftt.csv') %>%
    rowwise() %>%
-   mutate(ftt = mean(c_across(ftt1:ftt3))) %>%
+   mutate(ftt = sum(c_across(ftt1:ftt3))) %>%
    select(subj, ftt)
 ```
+Instead of reading the file into a dataframe and then manipulating it, we here do it all in one tidy command to make a two column dataframe *ftt* with the participant ID and the FTT total.
 
-* the 35 PsiQ vividness of imagery items - 5 of each of 7 modalities (0 not at all to 10 as vivid as real life) (score = mean of all items)
+### Vividness of Imagery
+The PsiQ vividness of imagery scale has 35 items, five for each of seven modalities. For this analysis, we only want the first five items which measured vividness of visual imagery. These were answered on a scale running from 0 (not at all vivid) to 10 (as vivid as real life), and the score is the mean of all five items.
 
 ```{r}
 psiq <- read_csv('case-studies/jon-may/psiq.csv') %>%
    rowwise() %>%
-   mutate(psiq = mean(c_across(2:36))) %>%
+   mutate(psiq = mean(c_across(2:6))) %>%
    select(subj, psiq)
 ```
+### Combining the dataframes
+We now have four dataframes for problems solved, the Big 5, the FTT, and the PsiQ. We need to join these together using the participant ID `subj` as the key.
 
 ```{r}
 data <- full_join(ocean.scales, solved, by = 'subj') %>%
    full_join(ftt, by = 'subj') %>%
    full_join(psiq, by = 'subj')
 ```
+Using `full_join` makes sure that all of the data is retained, even if not all of the participants were in eall of the four data frames.
 
 ## Mean, Standard deviation, skewness, kurtosis for all independent variables (n=48)
 
